@@ -5,7 +5,6 @@ package grpc
 import (
 	"context"
 	"errors"
-	"strings"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -13,7 +12,8 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	userv1 "user-management-api/internal/adapter/handler/grpc/gen/user/v1"
+	userv1 "user-management-api/internal/adapter/grpc/gen/user/v1"
+	"user-management-api/internal/adapter/http/middleware"
 	"user-management-api/internal/core/domain"
 	"user-management-api/internal/core/port"
 )
@@ -89,7 +89,12 @@ func AuthUnaryInterceptor(tokens port.TokenService) grpc.UnaryServerInterceptor 
 		if len(values) == 0 {
 			return nil, status.Error(codes.Unauthenticated, "missing authorization metadata")
 		}
-		token := strings.TrimSpace(strings.TrimPrefix(values[0], "Bearer "))
+		// Shared with the HTTP middleware so both transports accept exactly
+		// the same credential format.
+		token, ok := middleware.BearerToken(values[0])
+		if !ok {
+			return nil, status.Error(codes.Unauthenticated, "malformed authorization metadata")
+		}
 		if _, err := tokens.Verify(token); err != nil {
 			return nil, status.Error(codes.Unauthenticated, "invalid or expired token")
 		}

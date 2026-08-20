@@ -6,15 +6,15 @@ managed:
   enabled: true
   override:
     - file_option: go_package_prefix
-      value: user-management-api/internal/adapter/handler/grpc/gen
+      value: user-management-api/internal/adapter/grpc/gen
 
 # Plugins are pulled from the Buf Schema Registry (buf.build), so generating
 # the contract needs only `buf` on PATH — no local protoc or protoc-gen-*
 # installation, and every developer generates with the exact same versions.
 plugins:
   - remote: buf.build/protocolbuffers/go:v1.36.12
-    out: internal/adapter/handler/grpc/gen
+    out: internal/adapter/grpc/gen
     opt: paths=source_relative
   - remote: buf.build/grpc/go:v1.6.2
-    out: internal/adapter/handler/grpc/gen
+    out: internal/adapter/grpc/gen
     opt: paths=source_relative

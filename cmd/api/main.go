@@ -17,9 +17,9 @@ import (
 	"google.golang.org/grpc/reflection"
 
 	"user-management-api/internal/adapter/auth"
-	grpchandler "user-management-api/internal/adapter/handler/grpc"
-	userv1 "user-management-api/internal/adapter/handler/grpc/gen/user/v1"
-	httphandler "user-management-api/internal/adapter/handler/http"
+	grpchandler "user-management-api/internal/adapter/grpc"
+	userv1 "user-management-api/internal/adapter/grpc/gen/user/v1"
+	"user-management-api/internal/adapter/http/router"
 	mongorepo "user-management-api/internal/adapter/repository/mongo"
 	"user-management-api/internal/config"
 	"user-management-api/internal/core/service"
@@ -81,7 +81,7 @@ func run(logger *slog.Logger) error {
 	// --- HTTP server (driving adapter) ---
 	httpServer := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           httphandler.NewRouter(userService, tokens, logger),
+		Handler:           router.New(userService, tokens, logger),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	errCh := make(chan error, 2)

@@ -153,7 +153,7 @@ Configuration is split across [buf.yaml](buf.yaml) (module layout, `STANDARD` li
 - **Plugins come from the Buf Schema Registry**, not the local machine: `buf.build/protocolbuffers/go` and `buf.build/grpc/go` are pinned to exact versions, so `buf` on `PATH` is the only prerequisite — no `protoc`, no `go install` of protoc plugins, and every developer and CI run generates byte-identical output.
 - **Managed mode** owns the Go import path (`go_package_prefix`), so the `.proto` file stays free of language-specific options.
 
-Generated code lands in `internal/adapter/handler/grpc/gen/user/v1` (package `userv1`) and is committed, so the repository builds without running codegen.
+Generated code lands in `internal/adapter/grpc/gen/user/v1` (package `userv1`) and is committed, so the repository builds without running codegen.
 
 | Target | Purpose |
 | --- | --- |
@@ -174,15 +174,26 @@ internal/
     port/                   interfaces: UserRepository, PasswordHasher, TokenService, UserService
     service/                use cases + validation; background user counter
   adapter/
-    handler/http/           REST handlers, router, logging/auth/recovery middleware
-    handler/grpc/           gRPC server, auth interceptor, buf-generated stubs (gen/)
+    http/
+      dto/                  request/response payload structs + JSON decoding
+      handler/              REST handlers (one use case call each)
+      middleware/           auth, logging, recovery — one concern per file
+      response/             JSON writing + domain error → HTTP status mapping
+      router/               route table and middleware composition
+    grpc/                   gRPC server, auth interceptor
+      gen/user/v1/          buf-generated stubs (do not edit)
     repository/mongo/       MongoDB implementation of UserRepository
     auth/                   bcrypt hasher, HS256 JWT service
   config/                   env-based configuration
+  testutil/                 fakes for the core ports, shared by adapter tests
 ```
 
-- **HTTP/gRPC handlers** depend only on the `UserService` *port*, and the service depends only on repository/hasher/token *ports* — so unit tests swap in hand-written mocks (standard `testing` package only, no mock framework; see `*_test.go`).
-- **Domain errors** (`ErrUserNotFound`, `ErrEmailAlreadyExists`, …) are the contract between layers; the Mongo adapter translates driver errors into them, and each handler layer maps them to HTTP statuses / gRPC codes in one place.
+Each HTTP concern is its own package rather than a file in one `http` package, so the dependency direction is enforced by the compiler: `router` → `handler` → `dto`/`response`, and nothing imports back up the chain.
+
+- **HTTP/gRPC handlers** depend only on the `UserService` *port*, and the service depends only on repository/hasher/token *ports* — so unit tests swap in hand-written fakes from `internal/testutil` (standard `testing` package only, no mock framework; see `*_test.go`).
+- **Wire types never touch the domain**: handlers serialize `dto.UserResponse`, built field by field from `domain.User`, so a new domain field cannot leak to clients by accident.
+- **One bearer parser for both transports**: `middleware.BearerToken` is shared by the HTTP middleware and the gRPC interceptor, so `Authorization: Bearer <jwt>` is accepted (and rejected) identically over REST and gRPC.
+- **Domain errors** (`ErrUserNotFound`, `ErrEmailAlreadyExists`, …) are the contract between layers; the Mongo adapter translates driver errors into them, and each transport maps them to HTTP statuses / gRPC codes in one place.
 - **Concurrency task**: `internal/core/service/user_counter.go` runs in a goroutine and logs the user count every 10s; it stops cleanly on context cancellation.
 - **Graceful shutdown**: `signal.NotifyContext` on SIGINT/SIGTERM → HTTP `Shutdown` with timeout, gRPC `GracefulStop`, background goroutine join (`sync.WaitGroup`), Mongo disconnect.
 
