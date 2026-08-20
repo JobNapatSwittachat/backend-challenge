@@ -13,14 +13,14 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"user-management-api/internal/adapter/handler/grpc/pb"
+	userv1 "user-management-api/internal/adapter/handler/grpc/gen/user/v1"
 	"user-management-api/internal/core/domain"
 	"user-management-api/internal/core/port"
 )
 
-// Server implements pb.UserServiceServer.
+// Server implements userv1.UserServiceServer.
 type Server struct {
-	pb.UnimplementedUserServiceServer
+	userv1.UnimplementedUserServiceServer
 	service port.UserService
 }
 
@@ -28,24 +28,24 @@ func NewServer(service port.UserService) *Server {
 	return &Server{service: service}
 }
 
-func (s *Server) CreateUser(ctx context.Context, req *pb.CreateUserRequest) (*pb.CreateUserResponse, error) {
+func (s *Server) CreateUser(ctx context.Context, req *userv1.CreateUserRequest) (*userv1.CreateUserResponse, error) {
 	user, err := s.service.Register(ctx, req.GetName(), req.GetEmail(), req.GetPassword())
 	if err != nil {
 		return nil, toGRPCError(err)
 	}
-	return &pb.CreateUserResponse{User: toProtoUser(user)}, nil
+	return &userv1.CreateUserResponse{User: toProtoUser(user)}, nil
 }
 
-func (s *Server) GetUser(ctx context.Context, req *pb.GetUserRequest) (*pb.GetUserResponse, error) {
+func (s *Server) GetUser(ctx context.Context, req *userv1.GetUserRequest) (*userv1.GetUserResponse, error) {
 	user, err := s.service.GetByID(ctx, req.GetId())
 	if err != nil {
 		return nil, toGRPCError(err)
 	}
-	return &pb.GetUserResponse{User: toProtoUser(user)}, nil
+	return &userv1.GetUserResponse{User: toProtoUser(user)}, nil
 }
 
-func toProtoUser(user *domain.User) *pb.User {
-	return &pb.User{
+func toProtoUser(user *domain.User) *userv1.User {
+	return &userv1.User{
 		Id:        user.ID,
 		Name:      user.Name,
 		Email:     user.Email,
@@ -70,7 +70,7 @@ func toGRPCError(err error) error {
 // CreateUser is public so a first user can be created, mirroring the public
 // HTTP register endpoint.
 var publicMethods = map[string]bool{
-	pb.UserService_CreateUser_FullMethodName: true,
+	userv1.UserService_CreateUser_FullMethodName: true,
 }
 
 // AuthUnaryInterceptor validates the bearer token in incoming metadata for

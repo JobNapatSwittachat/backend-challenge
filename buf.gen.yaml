@@ -1,8 +1,20 @@
 version: v2
+
+# Managed mode owns the Go import path, so no `option go_package` is needed in
+# the .proto files themselves.
+managed:
+  enabled: true
+  override:
+    - file_option: go_package_prefix
+      value: user-management-api/internal/adapter/handler/grpc/gen
+
+# Plugins are pulled from the Buf Schema Registry (buf.build), so generating
+# the contract needs only `buf` on PATH — no local protoc or protoc-gen-*
+# installation, and every developer generates with the exact same versions.
 plugins:
-  - local: protoc-gen-go
-    out: .
-    opt: module=user-management-api
-  - local: protoc-gen-go-grpc
-    out: .
-    opt: module=user-management-api
+  - remote: buf.build/protocolbuffers/go:v1.36.12
+    out: internal/adapter/handler/grpc/gen
+    opt: paths=source_relative
+  - remote: buf.build/grpc/go:v1.6.2
+    out: internal/adapter/handler/grpc/gen
+    opt: paths=source_relative

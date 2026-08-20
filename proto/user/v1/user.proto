@@ -4,7 +4,8 @@ package user.v1;
 
 import "google/protobuf/timestamp.proto";
 
-option go_package = "user-management-api/internal/adapter/handler/grpc/pb;pb";
+// The Go import path is set by buf managed mode (see buf.gen.yaml), so it is
+// not hardcoded here.
 
 // UserService mirrors the CreateUser and GetUser use cases over gRPC.
 // All RPCs except CreateUser require an "authorization: Bearer <jwt>"

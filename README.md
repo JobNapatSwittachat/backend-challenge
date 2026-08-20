@@ -130,7 +130,7 @@ Fields are optional; omitted fields are unchanged. At least one is required.
 
 ## gRPC
 
-`CreateUser` and `GetUser` are also exposed over gRPC on `:9090` (see [proto/user.proto](proto/user.proto)). `GetUser` requires an `authorization: Bearer <jwt>` metadata entry, enforced by a server interceptor; `CreateUser` is public, mirroring HTTP register.
+`CreateUser` and `GetUser` are also exposed over gRPC on `:9090`. The contract lives in [proto/user/v1/user.proto](proto/user/v1/user.proto) and the Go code is generated from it with [buf](https://buf.build) — see the codegen section below. `GetUser` requires an `authorization: Bearer <jwt>` metadata entry, enforced by a server interceptor; `CreateUser` is public, mirroring HTTP register.
 
 ```bash
 grpcurl -plaintext -d '{"name":"Bob","email":"bob@example.com","password":"supersecret"}' \
@@ -140,7 +140,27 @@ grpcurl -plaintext -H "authorization: Bearer $TOKEN" -d '{"id":"<user-id>"}' \
   localhost:9090 user.v1.UserService/GetUser
 ```
 
-Regenerate stubs after editing the proto with `make proto` (needs `buf` + protoc plugins; install commands are in the Makefile).
+### Proto codegen with buf
+
+The `.proto` file is the source of truth for the gRPC contract; the Go types and client/server stubs are generated from it, never hand-written.
+
+```bash
+make proto
+```
+
+Configuration is split across [buf.yaml](buf.yaml) (module layout, `STANDARD` lint rules, breaking-change rules) and [buf.gen.yaml](buf.gen.yaml) (codegen). Two things are worth pointing out:
+
+- **Plugins come from the Buf Schema Registry**, not the local machine: `buf.build/protocolbuffers/go` and `buf.build/grpc/go` are pinned to exact versions, so `buf` on `PATH` is the only prerequisite — no `protoc`, no `go install` of protoc plugins, and every developer and CI run generates byte-identical output.
+- **Managed mode** owns the Go import path (`go_package_prefix`), so the `.proto` file stays free of language-specific options.
+
+Generated code lands in `internal/adapter/handler/grpc/gen/user/v1` (package `userv1`) and is committed, so the repository builds without running codegen.
+
+| Target | Purpose |
+| --- | --- |
+| `make proto` | Regenerate Go code from the proto |
+| `make proto-lint` | Lint the proto against buf's `STANDARD` ruleset |
+| `make proto-breaking` | Fail on wire-incompatible changes vs. `main` |
+| `make proto-check` | Fail if committed generated code is stale |
 
 ## Architecture
 
@@ -155,7 +175,7 @@ internal/
     service/                use cases + validation; background user counter
   adapter/
     handler/http/           REST handlers, router, logging/auth/recovery middleware
-    handler/grpc/           gRPC server, auth interceptor, generated stubs (pb/)
+    handler/grpc/           gRPC server, auth interceptor, buf-generated stubs (gen/)
     repository/mongo/       MongoDB implementation of UserRepository
     auth/                   bcrypt hasher, HS256 JWT service
   config/                   env-based configuration

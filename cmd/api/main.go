@@ -18,7 +18,7 @@ import (
 
 	"user-management-api/internal/adapter/auth"
 	grpchandler "user-management-api/internal/adapter/handler/grpc"
-	"user-management-api/internal/adapter/handler/grpc/pb"
+	userv1 "user-management-api/internal/adapter/handler/grpc/gen/user/v1"
 	httphandler "user-management-api/internal/adapter/handler/http"
 	mongorepo "user-management-api/internal/adapter/repository/mongo"
 	"user-management-api/internal/config"
@@ -94,7 +94,7 @@ func run(logger *slog.Logger) error {
 
 	// --- gRPC server (driving adapter) ---
 	grpcServer := grpc.NewServer(grpc.UnaryInterceptor(grpchandler.AuthUnaryInterceptor(tokens)))
-	pb.RegisterUserServiceServer(grpcServer, grpchandler.NewServer(userService))
+	userv1.RegisterUserServiceServer(grpcServer, grpchandler.NewServer(userService))
 	// Reflection lets tools like grpcurl discover the API without the proto file.
 	reflection.Register(grpcServer)
 	go func() {

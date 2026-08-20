@@ -1,4 +1,4 @@
-.PHONY: build run test vet proto docker-up docker-down
+.PHONY: build run test vet proto proto-lint proto-breaking proto-check docker-up docker-down
 
 build:
 	go build -o bin/api ./cmd/api
@@ -12,12 +12,22 @@ test:
 vet:
 	go vet ./...
 
-# Regenerates gRPC code. Requires buf, protoc-gen-go, protoc-gen-go-grpc:
+# Proto contract. The codegen plugins come from the Buf Schema Registry
+# (buf.build), so only buf itself is needed locally:
 #   go install github.com/bufbuild/buf/cmd/buf@latest
-#   go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
-#   go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
 proto:
 	buf generate
+
+proto-lint:
+	buf lint
+
+# Fails if the proto contract breaks wire compatibility with the main branch.
+proto-breaking:
+	buf breaking --against '.git#branch=main'
+
+# Fails if the committed Go code is out of date with the .proto files.
+proto-check: proto
+	git diff --exit-code -- internal/adapter/handler/grpc/gen
 
 docker-up:
 	docker compose up --build -d
