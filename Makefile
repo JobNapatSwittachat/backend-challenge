@@ -21,9 +21,10 @@ proto:
 proto-lint:
 	buf lint
 
-# Fails if the proto contract breaks wire compatibility with the main branch.
+# Fails if the proto contract breaks wire compatibility with the base branch.
+PROTO_AGAINST ?= .git\#branch=main
 proto-breaking:
-	buf breaking --against '.git#branch=main'
+	buf breaking --against '$(PROTO_AGAINST)'
 
 # Fails if the committed Go code is out of date with the .proto files.
 proto-check: proto
