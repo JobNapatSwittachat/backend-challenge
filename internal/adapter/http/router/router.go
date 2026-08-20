@@ -43,6 +43,10 @@ func registerUserRoutes(mux *http.ServeMux, users *user.Handler, auth func(http.
 	mux.Handle("POST /api/v1/users", auth(http.HandlerFunc(users.Register)))
 	mux.Handle("GET /api/v1/users", auth(http.HandlerFunc(users.List)))
 	mux.Handle("GET /api/v1/users/{id}", auth(http.HandlerFunc(users.Get)))
-	mux.Handle("PATCH /api/v1/users/{id}", auth(http.HandlerFunc(users.Update)))
-	mux.Handle("DELETE /api/v1/users/{id}", auth(http.HandlerFunc(users.Delete)))
+
+	// Writes are additionally restricted to the caller's own record: any
+	// authenticated user may read the directory, but none may edit or delete
+	// someone else's account.
+	mux.Handle("PATCH /api/v1/users/{id}", auth(middleware.RequireSelf(http.HandlerFunc(users.Update))))
+	mux.Handle("DELETE /api/v1/users/{id}", auth(middleware.RequireSelf(http.HandlerFunc(users.Delete))))
 }

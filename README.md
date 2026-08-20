@@ -15,8 +15,10 @@ The part-2 design exercise lives in [docs/lottery-search-design.md](docs/lottery
 ### With Docker (recommended)
 
 ```bash
-JWT_SECRET=$(openssl rand -hex 32) docker compose up --build
+echo "JWT_SECRET=$(openssl rand -hex 32)" > .env && docker compose up --build
 ```
+
+`JWT_SECRET` is mandatory: compose fails with an explicit message rather than falling back to a default secret. See [.env.example](.env.example).
 
 API: `http://localhost:8080` · gRPC: `localhost:9090` · MongoDB: `localhost:27017`
 
@@ -95,8 +97,10 @@ Token details: HS256-signed, claims are `sub` (user ID), `iss`, `iat`, `exp` (no
 | `POST` | `/api/v1/users` | ✅ | Create a user |
 | `GET` | `/api/v1/users` | ✅ | List all users |
 | `GET` | `/api/v1/users/{id}` | ✅ | Fetch a user by ID |
-| `PATCH` | `/api/v1/users/{id}` | ✅ | Update name and/or email |
-| `DELETE` | `/api/v1/users/{id}` | ✅ | Delete a user |
+| `PATCH` | `/api/v1/users/{id}` | ✅ own account | Update name and/or email |
+| `DELETE` | `/api/v1/users/{id}` | ✅ own account | Delete a user |
+
+"own account" means the `{id}` must match the `sub` claim of the token; editing or deleting anyone else returns `403`.
 
 **Create / Register — 201:**
 
@@ -125,6 +129,7 @@ Fields are optional; omitted fields are unchanged. At least one is required.
 | Validation failure | 400 | `{"error":"validation failed: password must be at least 8 characters"}` |
 | Missing/invalid token | 401 | `{"error":"invalid or expired token"}` |
 | Wrong credentials | 401 | `{"error":"invalid email or password"}` |
+| Editing another user | 403 | `{"error":"you may only modify your own account"}` |
 | Unknown user | 404 | `{"error":"user not found"}` |
 | Duplicate email | 409 | `{"error":"email already exists"}` |
 
@@ -214,7 +219,7 @@ Two deliberate exceptions: `query.go` groups the three read-only use cases, whic
 - **Validation** is centralized in the service layer (applies to both HTTP and gRPC): required fields, RFC-5322 email parsing (`net/mail`), name length, password length; emails are lowercased and trimmed before storage/lookup.
 - **`POST /api/v1/users` vs register**: the challenge lists "create user" as an operation and also requires registration; both exist — register is public (needed to obtain a first token), create is JWT-protected. They share the same service use case.
 - **`PATCH` for updates** since the API updates a subset of fields (`name`, `email`); `null`/omitted means "unchanged".
-- **Authorization model**: any authenticated user can manage users (an admin-style API). Per-user ownership rules were out of scope, but the authenticated user ID is available in the request context (`UserIDFromContext`) if needed.
+- **Authorization model**: authentication and authorization are separate steps. `middleware.Auth` proves *who* the caller is; `middleware.RequireSelf` then enforces *what* they may touch — reads (`GET /users`, `GET /users/{id}`) are open to any authenticated user, since the challenge requires listing and fetching users, but `PATCH` and `DELETE` only accept the caller's own ID and answer `403` otherwise. Without that second step, any account could delete any other. A role-based admin override would be the natural next step and is not implemented.
 - **Standard library router** over a framework: Go 1.22 `ServeMux` supports method + path-variable patterns, keeping the dependency graph minimal and idiomatic.
 - **Separate persistence model** (`userDocument`) from the domain entity so BSON tags and ObjectIDs never leak into the core.
 - **Structured logging** with `log/slog` (JSON in production); the logging middleware records method, path, status, and execution time as required.

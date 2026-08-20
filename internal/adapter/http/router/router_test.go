@@ -106,6 +106,60 @@ func TestUnknownRouteAndMethodMismatch(t *testing.T) {
 	}
 }
 
+// testutil.AuthHeader authenticates as "user-1", so writes aimed at any other
+// id must be refused before the service is reached.
+func TestWritesToAnotherUserAreForbidden(t *testing.T) {
+	service := &testutil.UserService{
+		UpdateFn: func(string, domain.UserUpdate) (*domain.User, error) {
+			t.Error("update must not reach the service for another user")
+			return nil, nil
+		},
+		DeleteFn: func(string) error {
+			t.Error("delete must not reach the service for another user")
+			return nil
+		},
+	}
+	handler := newRouter(service)
+
+	tests := []struct{ method, body string }{
+		{http.MethodPatch, `{"name":"Hacked"}`},
+		{http.MethodDelete, ""},
+	}
+	for _, tc := range tests {
+		recorder := request(t, handler, tc.method, "/api/v1/users/victim-id", tc.body, testutil.AuthHeader)
+		if recorder.Code != http.StatusForbidden {
+			t.Errorf("%s another user: want 403, got %d", tc.method, recorder.Code)
+		}
+	}
+}
+
+func TestWritesToOwnAccountAreAllowed(t *testing.T) {
+	service := &testutil.UserService{
+		UpdateFn: func(string, domain.UserUpdate) (*domain.User, error) { return testutil.User, nil },
+		DeleteFn: func(string) error { return nil },
+	}
+	handler := newRouter(service)
+
+	if recorder := request(t, handler, http.MethodPatch, "/api/v1/users/user-1", `{"name":"New"}`, testutil.AuthHeader); recorder.Code != http.StatusOK {
+		t.Errorf("PATCH own account: want 200, got %d (%s)", recorder.Code, recorder.Body)
+	}
+	if recorder := request(t, handler, http.MethodDelete, "/api/v1/users/user-1", "", testutil.AuthHeader); recorder.Code != http.StatusNoContent {
+		t.Errorf("DELETE own account: want 204, got %d", recorder.Code)
+	}
+}
+
+// Reads stay open to any authenticated user: the challenge requires listing
+// and fetching users.
+func TestReadsOfAnotherUserAreAllowed(t *testing.T) {
+	service := &testutil.UserService{
+		GetByIDFn: func(string) (*domain.User, error) { return testutil.User, nil },
+	}
+	recorder := request(t, newRouter(service), http.MethodGet, "/api/v1/users/somebody-else", "", testutil.AuthHeader)
+	if recorder.Code != http.StatusOK {
+		t.Errorf("want 200, got %d", recorder.Code)
+	}
+}
+
 func TestPanicInHandlerBecomes500(t *testing.T) {
 	// ListFn is nil, so the handler panics — the recovery middleware must
 	// turn that into a 500 rather than crashing the server.

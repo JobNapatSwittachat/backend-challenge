@@ -7,7 +7,9 @@ services:
     environment:
       MONGO_URI: mongodb://mongo:27017
       MONGO_DB: user_management
-      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
+      # Mandatory: compose refuses to start rather than fall back to a default
+      # secret, which would let anyone who has read this repo forge tokens.
+      JWT_SECRET: ${JWT_SECRET:?required — put it in .env or the environment, e.g. openssl rand -hex 32}
       JWT_TTL: 24h
     depends_on:
       mongo:
