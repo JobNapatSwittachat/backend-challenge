@@ -167,28 +167,38 @@ Generated code lands in `internal/adapter/grpc/gen/user/v1` (package `userv1`) a
 Hexagonal (ports & adapters). Dependencies point inward; the core imports no driver or framework.
 
 ```
-cmd/api/                    composition root: wiring, graceful shutdown
+cmd/api/                      composition root: wiring, graceful shutdown
 internal/
   core/
-    domain/                 entities + sentinel errors (zero dependencies)
-    port/                   interfaces: UserRepository, PasswordHasher, TokenService, UserService
-    service/                use cases + validation; background user counter
+    domain/                   entities + sentinel errors (zero dependencies)
+    port/                     interfaces: UserRepository, PasswordHasher, TokenService, UserService
+    service/                  one file per use case
+      service.go              construction
+      register.go login.go update.go delete.go query.go
+      validate.go             input rules shared by every use case
+      counter.go              background user-count task
   adapter/
     http/
-      dto/                  request/response payload structs + JSON decoding
-      handler/              REST handlers (one use case call each)
-      middleware/           auth, logging, recovery — one concern per file
-      response/             JSON writing + domain error → HTTP status mapping
-      router/               route table and middleware composition
-    grpc/                   gRPC server, auth interceptor
-      gen/user/v1/          buf-generated stubs (do not edit)
-    repository/mongo/       MongoDB implementation of UserRepository
-    auth/                   bcrypt hasher, HS256 JWT service
-  config/                   env-based configuration
-  testutil/                 fakes for the core ports, shared by adapter tests
+      dto/                    wire payloads, one file per use case
+      handler/user/           user endpoints, one file per use case
+      handler/health/         liveness endpoint
+      middleware/             auth.go, logging.go, recovery.go, context.go
+      response/               json.go (writing) + error.go (domain → status)
+      router/                 route table and middleware composition
+    grpc/                     createuser.go, getuser.go, interceptor.go, error.go, mapper.go
+      gen/user/v1/            buf-generated stubs (do not edit)
+    repository/mongo/         MongoDB implementation of UserRepository
+    auth/                     bcrypt hasher, HS256 JWT service
+  config/                     env-based configuration
+  testutil/                   fakes for the core ports, shared by adapter tests
 ```
 
-Each HTTP concern is its own package rather than a file in one `http` package, so the dependency direction is enforced by the compiler: `router` → `handler` → `dto`/`response`, and nothing imports back up the chain.
+Two rules drive this layout:
+
+- **A package per module or concern.** Each HTTP concern is its own package rather than a file in one big `http` package, so the dependency direction is enforced by the compiler: `router` → `handler` → `dto`/`response`, and nothing imports back up the chain. Adding a second module means adding `handler/<module>/`, not growing an existing file.
+- **A file per use case.** `register.go`, `login.go`, `update.go`, and their tests line up one-to-one across the service, handler, and gRPC layers, so a change to one use case touches one small file per layer. Names are not prefixed with the module (`user.Handler.Register` lives in `handler/user/register.go`), since the package already supplies that context.
+
+Two deliberate exceptions: `query.go` groups the three read-only use cases, which are one-line pass-throughs carrying no rules of their own, and the Mongo repository stays in one file because it implements a single port as a cohesive unit of driver-error translation.
 
 - **HTTP/gRPC handlers** depend only on the `UserService` *port*, and the service depends only on repository/hasher/token *ports* — so unit tests swap in hand-written fakes from `internal/testutil` (standard `testing` package only, no mock framework; see `*_test.go`).
 - **Wire types never touch the domain**: handlers serialize `dto.UserResponse`, built field by field from `domain.User`, so a new domain field cannot leak to clients by accident.
@@ -200,7 +210,7 @@ Each HTTP concern is its own package rather than a file in one `http` package, s
 ## Design decisions & assumptions
 
 - **Email uniqueness is enforced by a unique Mongo index**, not a read-then-write check, so it holds under concurrent registrations; duplicate-key errors are translated to `ErrEmailAlreadyExists` (HTTP 409).
-- **Passwords**: bcrypt (default cost), minimum 8 chars. Login returns the same `401 invalid email or password` whether the email is unknown or the password is wrong, to avoid account enumeration.
+- **Passwords**: bcrypt (default cost), minimum 8 characters — counted as characters (runes), not bytes, so a short multibyte password cannot pass the check by being long in UTF-8. Login returns the same `401 invalid email or password` whether the email is unknown or the password is wrong, to avoid account enumeration.
 - **Validation** is centralized in the service layer (applies to both HTTP and gRPC): required fields, RFC-5322 email parsing (`net/mail`), name length, password length; emails are lowercased and trimmed before storage/lookup.
 - **`POST /api/v1/users` vs register**: the challenge lists "create user" as an operation and also requires registration; both exist — register is public (needed to obtain a first token), create is JWT-protected. They share the same service use case.
 - **`PATCH` for updates** since the API updates a subset of fields (`name`, `email`); `null`/omitted means "unchanged".
