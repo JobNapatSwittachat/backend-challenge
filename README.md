@@ -8,7 +8,14 @@ A RESTful (+ gRPC) user management service in Go, built for the [7-solutions bac
 - **Hexagonal architecture** (ports & adapters)
 - All challenge bonuses implemented: Docker/compose, interface abstraction, validation, graceful shutdown, gRPC
 
-The part-2 design exercise lives in [docs/lottery-search-design.md](docs/lottery-search-design.md).
+## Deliverables
+
+| Document | What it covers |
+| --- | --- |
+| This README | Setup, JWT guide, sample requests and responses, architecture |
+| [docs/proof-of-work.md](docs/proof-of-work.md) | Verbatim output of every check: tests, coverage, end-to-end runs against the real stack, and the known gaps |
+| [docs/adr/](docs/adr/) | Ten architecture decision records — what was chosen, what was rejected, and what it costs |
+| [docs/lottery-search-design.md](docs/lottery-search-design.md) | Part 2: the lottery search design proposal (no code, per the brief) |
 
 ## Quick start
 

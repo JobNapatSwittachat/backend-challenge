@@ -1,4 +1,20 @@
-.PHONY: build run test vet proto proto-lint proto-breaking proto-check docker-up docker-down
+.PHONY: build run test vet verify cover proto proto-lint proto-breaking proto-check docker-up docker-down
+
+# Everything the proof of work claims for static checks and tests, in one go.
+verify:
+	@test -z "$$(gofmt -l .)" || { echo "gofmt: files need formatting:"; gofmt -l .; exit 1; }
+	go vet ./...
+	go test ./... -count=1
+	buf lint
+
+# Coverage over the packages the suite exercises. Packages with no test files
+# are left out of the test list on purpose: running `-cover` on them fails on
+# a host whose local Go is older than the go.mod directive, because the
+# downloaded toolchain cannot resolve the covdata tool.
+cover:
+	go test $$(go list -f '{{if or .TestGoFiles .XTestGoFiles}}{{.ImportPath}}{{end}}' ./...) \
+		-count=1 -coverpkg=./... -coverprofile=coverage.out
+	go tool cover -func=coverage.out | tail -1
 
 build:
 	go build -o bin/api ./cmd/api
